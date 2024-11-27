@@ -5,7 +5,7 @@
 Screenshots
 ----
 
-![Screenshot](https://raw.github.com/wiki/Fineas/Proof-of-Thought/images/pot_screenshot.jpeg)
+![Screenshot](./images/pot_screenshot.jpeg)
 
 Usage
 ----
