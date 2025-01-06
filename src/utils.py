@@ -1,11 +1,19 @@
 import os
 import sys
+import random
 import hashlib
+from datasets import load_dataset
 
 """
 Constants
 """
 EXP_STORAGE = '../successful_exploits'
+
+"""
+Globals
+"""
+dataset1 = None
+dataset2 = None
 
 """
 Methods
@@ -45,3 +53,29 @@ def print_bold(text):
 
 def print_underline(text):
     return f"\033[4m{text}\033[0m"
+
+def load_task():
+    global dataset1, dataset2
+
+    try:
+        choice = random.choice([1, 2])
+        if choice == 1:
+            if dataset1 == None:
+                dataset1 = load_gsm8k()
+            task = dataset1['train'][random.randint(0, len(dataset1['train']))]['question']
+        else:
+            if dataset2 == None:
+                dataset2 = load_mmlu()
+            task = dataset2['auxiliary_train'][random.randint(0, len(dataset2['auxiliary_train']))]['question']
+        
+        return (choice, task)
+
+    except Exception as e:
+        print(f"[!] Error loading task: {e}\n")
+        return (0, "Solve the following math problem: What is 12 multiplied by 15?")
+
+def load_gsm8k():
+    return load_dataset('gsm8k', 'main')
+
+def load_mmlu():
+    return load_dataset('cais/mmlu', 'all')

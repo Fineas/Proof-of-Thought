@@ -100,6 +100,17 @@ def display_round_results(round_no, evaluations):
 
     print(tabulate(table, headers, tablefmt="grid"))
 
+def display_round(task, round_no, dataset):
+    if dataset == 1:
+        dataset = 'gsm8k' 
+    elif dataset == 2:
+        dataset = 'mmlu' 
+    else:
+        dataset = 'unknown' 
+    print(f" {print_bold(f'Round {round_no} - {dataset}')}")
+    print(f" {print_bold('Task')}: {task}")
+    print("-"*SEPARATOR_LEN+'\n')
+
 """
 Methods
 """
@@ -131,16 +142,27 @@ def assign_roles(agents, num_miners):
 def debate_and_vote(miners, miner_evaluations):
     votes = {}
     for miner in miners:
-        preferred_miner_id = miner.select_preferred_evaluation(miner_evaluations)
-        votes[preferred_miner_id] = votes.get(preferred_miner_id, 0) + 1
+        preferred_miners, _score = miner.select_preferred_evaluation(miner_evaluations)
+        for miner_id in preferred_miners:
+            votes[miner_id] = votes.get(miner_id, 0) + 1
+
+    print(f"\n[*] Voting Results: {votes}\n")
+
+    max_votes = max(votes, key=votes.get)
+    max_votes = votes[max_votes]
+    miners_max_votes = [k for k,v in votes.items() if v == max_votes]
+    print(f"[*] Max votes: {max_votes} ->", miners_max_votes)
 
     # Check if any miner has majority votes
-    for miner_id, vote_count in votes.items():
-        if vote_count > len(miners) / 2:
-            return True, miner_id  # Consensus reached
-    return False, None  # No consensus
+    if len(miners_max_votes) == 1:
+        if max_votes > len(miners) / 2:
+            return True, miners_max_votes[0] # Consensus reached
+        else:
+            return False, None # No consensus
+    else:
+        return False, None # No consensus
 
-def consensus(miners, transactions, agent_dict, max_rounds=2):
+def consensus(miners, workers, transactions, agent_dict, max_rounds=2):
     round_number = 1
     while round_number < max_rounds:
         # Each miner evaluates proposals
@@ -154,12 +176,12 @@ def consensus(miners, transactions, agent_dict, max_rounds=2):
         display_round_results(round_number, miner_evaluations)
 
         # Debate and voting
-        consensus_reached, winning_miner_id = debate_and_vote(miners, miner_evaluations)
+        consensus_reached, winning_worker_id = debate_and_vote(miners, miner_evaluations)
         display_consensus_header(consensus_reached)
         if consensus_reached:
-            # Winning miner creates the block
-            winning_miner = next((m for m in miners if m.id == winning_miner_id), None)
-            block = create_block(winning_miner, transactions, miner_evaluations[winning_miner.id], agent_dict, round_number)
+            # Winning worker creates the block
+            winning_worker = next((w for w in workers if w.id == winning_worker_id), None)
+            block = create_block(winning_worker, transactions, miner_evaluations, agent_dict, round_number)
             return block 
         else:
             round_number += 1
@@ -167,24 +189,25 @@ def consensus(miners, transactions, agent_dict, max_rounds=2):
     # If no consensus, return None
     return None
 
-def create_block(winning_miner, transactions, evaluations, agent_dict, round_number):
+def create_block(winning_worker, transactions, evaluations, agent_dict, round_number):
     previous_hash = blockchain[-1].compute_hash() if blockchain else '0' * 64
-    signature = winning_miner.sign_data(previous_hash)
-    block = Block(previous_hash, transactions, winning_miner.id, signature, round_number)
+    signature = winning_worker.sign_data(previous_hash)
+    block = Block(previous_hash, transactions, winning_worker.id, signature, round_number)
     # Update stakes based on evaluations
-    update_stakes(evaluations, winning_miner, agent_dict, round_number)
+    update_stakes(evaluations, winning_worker, agent_dict, round_number)
     blockchain.append(block)
     return block
 
 def update_stakes(evaluations, miner, agent_dict, round_number):
-    for proposer_id, score in evaluations.items():
-        proposer = agent_dict[proposer_id]
-        if proposer.role == Role.WORKER:
-            proposer.stake += score  # Reward based on evaluation score
+    for evaluator_id, evals in evaluations.items():
+        for proposer_id, score in evals.items():
+            proposer = agent_dict[proposer_id]
+            if proposer.role == Role.WORKER:
+                proposer.stake += score  # Reward based on evaluation score
     # Miner gets reward based on the difficulty (round_number)
     miner.stake += round_number
 
-def simulate(arg_agn, arg_min, arg_mal):
+def simulate(arg_agn, arg_min, arg_mal, rounds=1):
     num_agents = arg_agn     # Number of agents
     num_miners = arg_min     # Number of miners
     num_malicious = arg_mal  # Number of malicious agents
@@ -207,58 +230,66 @@ def simulate(arg_agn, arg_min, arg_mal):
     global blockchain
     blockchain = []
 
-    # Define the Task
-    task = "Solve the following math problem: What is 12 multiplied by 15?"
+    # Run <rounds> Simulations
+    for i in range(rounds):
 
-    '''
-    role assignment, 
-    proposal statement, 
-    evaluation,
-    and decision-making.
-    '''
+        # Define the Task
+        dataset, task = load_task()
 
-    # Assign Roles
-    miners, workers = assign_roles(agents, num_miners)
+        # === DEBUG === 
+        display_round(task, i, dataset)
 
-    # === DEBUG === 
-    display_agents(agent_dict)
+        '''
+        role assignment, 
+        proposal statement, 
+        evaluation,
+        and decision-making.
+        '''
 
-    # === DEBUG ===
-    display_workers_header()
-    
-    # Generate proposals
-    transactions = []
-    for worker in workers:
-        print(f"[*] Agent {print_blue(worker.id)} - {worker.role}", print_red("MALICIOUS") if worker.is_malicious else "")
-        answer, tx = worker.generate_proposal(task)
-        if tx:
-            print("    >", print_yellow(answer), '\n'+'-'*SEPARATOR_LEN)
-            transactions.append(tx)
+        # Assign Roles
+        miners, workers = assign_roles(agents, num_miners)
 
-    # === DEBUG ===
-    display_miners_header()
+        # === DEBUG === 
+        display_agents(agent_dict)
 
-    # Run the Consensus
-    block = consensus(miners, transactions, agent_dict)
-    if block:
-        print(f"[*] Winning miner: {print_blue(block.miner_id)}")
-        print(f"[*] Block hash: {print_bold(block.compute_hash())}")
-        print("[*] Final answer selected:")
-        # Assuming the highest scored answer is selected
-        highest_score = -1
-        selected_answer = None
-        for tx in block.transactions:
-            proposer = agent_dict[tx.proposer_id]
-            score = proposer.stake
-            if score > highest_score:
-                highest_score = score
-                selected_answer = tx.answer
-        print(print_green(selected_answer))
-    else:
-        print("Consensus not achieved within the maximum rounds.")
+        # === DEBUG ===
+        display_workers_header()
+        
+        # Generate proposals
+        transactions = []
+        for worker in workers:
+            print(f"[*] Agent {print_blue(worker.id)} - {worker.role}", print_red("MALICIOUS") if worker.is_malicious else "")
+            answer, tx = worker.generate_proposal(task)
+            if tx:
+                print("    >", print_yellow(answer), '\n'+'-'*SEPARATOR_LEN)
+                transactions.append(tx)
+
+        # === DEBUG ===
+        display_miners_header()
+
+        # Run the Consensus
+        block = consensus(miners, workers, transactions, agent_dict)
+        if block:
+            print(f"[*] Winning worker: {print_blue(block.worker_id)}")
+            print(f"[*] Block hash: {print_bold(block.compute_hash())}")
+            print("[*] Final answer selected:")
+            # Assuming the highest scored answer is selected
+            highest_score = -1
+            selected_answer = None
+            for tx in block.transactions:
+                proposer = agent_dict[tx.proposer_id]
+                score = proposer.stake
+                if score > highest_score:
+                    highest_score = score
+                    selected_answer = tx.answer
+            print(print_green(selected_answer))
+            print()
+        else:
+            print("Consensus not achieved within the maximum rounds.\n")
 
 def init():
     p = argparse.ArgumentParser(add_help=False)
+    p.add_argument('-r', '--rounds', type=int, nargs='?', const=1, default=1, help='Number of rounds')
     p.add_argument('-a', '--agents', type=int, nargs='?', const=6, default=6, help='Number of agents')
     p.add_argument('-w', '--workers', type=int, nargs='?', const=3, default=3, help='Number of workers')
     p.add_argument('-m', '--malicious', type=int, nargs='?', const=2, default=2, help='Number of malicious agents')
@@ -267,9 +298,15 @@ def init():
 if __name__ == "__main__":
     
     args = init()
-    (arg_a, arg_w, arg_m) = (args.agents, args.workers, args.malicious)
+    (rounds, arg_a, arg_w, arg_m) = (args.rounds, args.agents, args.workers, args.malicious)
     # print(f"Number of agents: {arg_a}")
     # print(f"Number of workers: {arg_w}")
     # print(f"Number of malicious agents: {arg_m}")
 
-    simulate(arg_a, arg_w, arg_m)
+    simulate(arg_a, arg_w, arg_m, rounds=rounds)
+
+    # === DEBUG ===
+    for b in blockchain:
+        b.display()
+        if len(blockchain) > 1:
+            print(' '*41+"|")
