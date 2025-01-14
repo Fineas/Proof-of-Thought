@@ -263,6 +263,8 @@ def simulate(arg_agn, arg_min, arg_mal, rounds=1):
             if tx:
                 print("    >", print_yellow(answer), '\n'+'-'*SEPARATOR_LEN)
                 transactions.append(tx)
+            else:
+                print("    > No proposal generated.\n")
 
         # === DEBUG ===
         display_miners_header()

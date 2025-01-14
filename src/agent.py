@@ -72,7 +72,7 @@ print(score)
             answer = self.generate_statement(task)
         
         if answer == "":
-            return None
+            return (None, None)
         else:
             signature = self.sign_data(answer)
             return (answer, Transaction(self.id, answer, signature))
