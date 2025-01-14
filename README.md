@@ -13,8 +13,16 @@
 
 Screenshots
 ----
+List of Agents with their respective `IDs` and `Roles`:
+![Screenshot](./images/agents.jpeg)
 
-![Screenshot](./images/pot_screenshot.jpeg)
+Example of `Worker` output:
+![Screenshot](./images/worker.jpeg)
+
+Results of the evaluation round:
+![Screenshot](./images/evaluation.jpeg)
+
+
 
 Usage
 ----
