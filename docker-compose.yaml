@@ -1,0 +1,9 @@
+services:
+  pot:
+    build: .
+    container_name: pot_container
+    environment:
+      FLAG: ITEC{https://youtu.be/niiYWyglQMM}
+    ports:
+      - "6432:6432"
+    restart: always

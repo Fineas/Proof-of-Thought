@@ -1,0 +1,16 @@
+service pot
+{
+    disable = no
+    type        = UNLISTED
+    wait        = no
+    server      = /bin/sh
+    server_args = -c cd${IFS}/home/pot;exec${IFS}./run.sh
+    socket_type = stream
+    protocol    = tcp
+    user        = pot
+    port        = 6432
+    flags       = REUSE
+    per_source	= 1 # the maximum instances of this service per source IP address
+    rlimit_cpu	= 60 # the maximum number of CPU seconds that the service may use
+    nice        = 18
+}
