@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import random
 import hashlib
 from datasets import load_dataset
@@ -7,7 +8,7 @@ from datasets import load_dataset
 """
 Constants
 """
-EXP_STORAGE = '../successful_exploits'
+EXP_STORAGE = '../successful_exploits/successful_exploits.json'
 
 """
 Globals
@@ -29,12 +30,18 @@ def load_eval_prompt(file_name):
 
     sys.exit(1)
 
-def store_exploit_string(exploit_string):
-    file_name = hashlib.md5(exploit_string.encode()).hexdigest()
-    file_path = os.path.join(EXP_STORAGE, file_name)
+def store_exploit_string(exploit_inputs, team_name):
+    if not os.path.exists(EXP_STORAGE):
+        data = {"Submissions": {}}
+    else:
+        with open(EXP_STORAGE, 'r') as f:
+            data = json.load(f)
     
-    with open(file_path, 'w') as file:
-        file.write(exploit_string)
+    data["Submissions"][team_name] = exploit_inputs
+    
+    with open(EXP_STORAGE, 'w') as f:
+        json.dump(data, f, indent=4)
+
 
 def print_red(text):
     return f"\033[91m{text}\033[0m"

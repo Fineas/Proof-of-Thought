@@ -37,12 +37,16 @@ Constants
 """
 DEBUG = True
 SEPARATOR_LEN = 72
+ROUND_BONUS = 5
+VOTE_REWARD = 10
 EVAL_PROMPT = load_eval_prompt("../prompts/eval_prompt.txt")
 
 """
 Globals
 """
 blockchain = None
+agent007 = None
+inputs = {}
 
 """
 Enums
@@ -114,11 +118,15 @@ def display_round(task, round_no, dataset):
 """
 Methods
 """
-def assign_roles(agents, num_miners):
+def assign_roles(agents, num_miners, flag=1):
     # Assign roles based on stake
     agents_sorted = sorted(agents, key=lambda x: x.stake, reverse=True)
-    miners = agents_sorted[:num_miners]
-    workers = agents_sorted[num_miners:]
+    if flag:
+        workers = agents_sorted[:num_miners]
+        miners = agents_sorted[num_miners:]
+    else:
+        miners = agents_sorted[:num_miners]
+        workers = agents_sorted[num_miners:]
 
     for agent in miners:
         agent.role = Role.MINER
@@ -127,24 +135,30 @@ def assign_roles(agents, num_miners):
 
     return miners, workers
 
-def assign_roles(agents, num_miners):
-    # Randomly select 'num_miners' agents to be miners
-    miners = random.sample(agents, num_miners)
-    workers = [agent for agent in agents if agent not in miners]
+# def assign_roles(agents, num_miners):
+#     # Randomly select 'num_miners' agents to be miners
+#     miners = random.sample(agents, num_miners)
+#     workers = [agent for agent in agents if agent not in miners]
     
-    for agent in miners:
-        agent.role = Role.MINER
-    for agent in workers:
-        agent.role = Role.WORKER
+#     for agent in miners:
+#         agent.role = Role.MINER
+#     for agent in workers:
+#         agent.role = Role.WORKER
 
-    return miners, workers
+#     return miners, workers
 
 def debate_and_vote(miners, miner_evaluations):
     votes = {}
+    voter_map = {}
+
     for miner in miners:
-        preferred_miners, _score = miner.select_preferred_evaluation(miner_evaluations)
-        for miner_id in preferred_miners:
-            votes[miner_id] = votes.get(miner_id, 0) + 1
+        preferred_workers, _score = miner.select_preferred_evaluation(miner_evaluations)
+        for worker_id in preferred_workers:
+            votes[worker_id] = votes.get(worker_id, 0) + 1
+
+            if miner.id not in voter_map:
+                voter_map[miner.id] = []
+            voter_map[miner.id].append(miner.id)
 
     print(f"\n[*] Voting Results: {votes}\n")
 
@@ -156,11 +170,11 @@ def debate_and_vote(miners, miner_evaluations):
     # Check if any miner has majority votes
     if len(miners_max_votes) == 1:
         if max_votes > len(miners) / 2:
-            return True, miners_max_votes[0] # Consensus reached
+            return max_votes, miners_max_votes[0], voter_map # Consensus reached
         else:
-            return False, None # No consensus
+            return False, None, None # No consensus
     else:
-        return False, None # No consensus
+        return False, None, None # No consensus
 
 def consensus(miners, workers, transactions, agent_dict, max_rounds=2):
     round_number = 1
@@ -176,12 +190,12 @@ def consensus(miners, workers, transactions, agent_dict, max_rounds=2):
         display_round_results(round_number, miner_evaluations)
 
         # Debate and voting
-        consensus_reached, winning_worker_id = debate_and_vote(miners, miner_evaluations)
+        consensus_reached, winning_worker_id, winning_voters = debate_and_vote(miners, miner_evaluations)
         display_consensus_header(consensus_reached)
         if consensus_reached:
             # Winning worker creates the block
             winning_worker = next((w for w in workers if w.id == winning_worker_id), None)
-            block = create_block(winning_worker, transactions, miner_evaluations, agent_dict, round_number)
+            block = create_block(winning_worker, transactions, miner_evaluations, agent_dict, round_number, consensus_reached, winning_voters)
             return block 
         else:
             round_number += 1
@@ -189,25 +203,36 @@ def consensus(miners, workers, transactions, agent_dict, max_rounds=2):
     # If no consensus, return None
     return None
 
-def create_block(winning_worker, transactions, evaluations, agent_dict, round_number):
+def create_block(winning_worker, transactions, evaluations, agent_dict, round_number, winning_score, winning_voters):
     previous_hash = blockchain[-1].compute_hash() if blockchain else '0' * 64
     signature = winning_worker.sign_data(previous_hash)
-    block = Block(previous_hash, transactions, winning_worker.id, signature, round_number)
+    block = Block(previous_hash, transactions, winning_worker.id, signature, round_number, winning_score)
+    
     # Update stakes based on evaluations
-    update_stakes(evaluations, winning_worker, agent_dict, round_number)
+    update_stakes(evaluations, winning_worker, agent_dict, round_number, winning_voters)
+
     blockchain.append(block)
     return block
 
-def update_stakes(evaluations, miner, agent_dict, round_number):
+def update_stakes(evaluations, miner, agent_dict, round_number, winning_voters):
+    # Update miner stake based on evaluations
     for evaluator_id, evals in evaluations.items():
         for proposer_id, score in evals.items():
             proposer = agent_dict[proposer_id]
             if proposer.role == Role.WORKER:
-                proposer.stake += score  # Reward based on evaluation score
-    # Miner gets reward based on the difficulty (round_number)
-    miner.stake += round_number
+                proposer.stake += score
+
+    # Winning Miner gets bonus reward based
+    miner.stake += ROUND_BONUS
+
+    # Reward miners who voted for the winning response
+    for voter_id in winning_voters:
+        voter = agent_dict[voter_id]
+        voter.stake +=  VOTE_REWARD # Half the reward of the winning worker
 
 def simulate(arg_agn, arg_min, arg_mal, rounds=1):
+    global agent007
+
     num_agents = arg_agn     # Number of agents
     num_miners = arg_min     # Number of miners
     num_malicious = arg_mal  # Number of malicious agents
@@ -225,6 +250,7 @@ def simulate(arg_agn, arg_min, arg_mal, rounds=1):
         agents.append(agent)
 
     agent_dict = {agent.id: agent for agent in agents}
+    agent007 = agents[0]
 
     # Initialize blockchain
     global blockchain
@@ -263,6 +289,8 @@ def simulate(arg_agn, arg_min, arg_mal, rounds=1):
             if tx:
                 print("    >", print_yellow(answer), '\n'+'-'*SEPARATOR_LEN)
                 transactions.append(tx)
+                if worker.is_malicious:
+                    inputs[f"Round {i}"] = answer
             else:
                 print("    > No proposal generated.\n")
 
@@ -294,7 +322,7 @@ def init():
     p.add_argument('-r', '--rounds', type=int, nargs='?', const=1, default=1, help='Number of rounds')
     p.add_argument('-a', '--agents', type=int, nargs='?', const=6, default=6, help='Number of agents')
     p.add_argument('-w', '--workers', type=int, nargs='?', const=3, default=3, help='Number of workers')
-    p.add_argument('-m', '--malicious', type=int, nargs='?', const=2, default=2, help='Number of malicious agents')
+    p.add_argument('-m', '--malicious', type=int, nargs='?', const=1, default=1, help='Number of malicious agents')
     return p.parse_args()
 
 if __name__ == "__main__":
@@ -312,3 +340,12 @@ if __name__ == "__main__":
         b.display()
         if len(blockchain) > 1:
             print(' '*41+"|")
+
+    if agent007.stake >= 114:
+        print("[*] "+print_green("Congratulations!")+" You have successfully corrupted the consensus 👏")
+        print("[*] Do you agree to submit your solution for research purposes? (y/n):")
+        if input("> ").strip().lower() == 'y':
+            team_name = input("Enter your team name > ")
+            store_exploit_string(inputs, team_name)
+        
+        print(os.getenv('FLAG'))
