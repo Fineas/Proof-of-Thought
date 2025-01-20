@@ -1,6 +1,6 @@
 #!/opt/homebrew/bin/python3.10
 
-# Copyright (c) 2024 Fineas Silaghi <https://github.com/Fineas>
+# Copyright (c) 2025 Fineas Silaghi <https://github.com/Fineas>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -38,7 +38,7 @@ Constants
 DEBUG = True
 SEPARATOR_LEN = 72
 ROUND_BONUS = 5
-VOTE_REWARD = 10
+VOTE_REWARD = 25
 EVAL_PROMPT = load_eval_prompt("../prompts/eval_prompt.txt")
 
 """
@@ -135,18 +135,6 @@ def assign_roles(agents, num_miners, flag=1):
 
     return miners, workers
 
-# def assign_roles(agents, num_miners):
-#     # Randomly select 'num_miners' agents to be miners
-#     miners = random.sample(agents, num_miners)
-#     workers = [agent for agent in agents if agent not in miners]
-    
-#     for agent in miners:
-#         agent.role = Role.MINER
-#     for agent in workers:
-#         agent.role = Role.WORKER
-
-#     return miners, workers
-
 def debate_and_vote(miners, miner_evaluations):
     votes = {}
     voter_map = {}
@@ -164,22 +152,21 @@ def debate_and_vote(miners, miner_evaluations):
 
     max_votes = max(votes, key=votes.get)
     max_votes = votes[max_votes]
-    miners_max_votes = [k for k,v in votes.items() if v == max_votes]
-    print(f"[*] Max votes: {max_votes} ->", miners_max_votes)
+    workers_max_votes = [k for k,v in votes.items() if v == max_votes]
 
-    # Check if any miner has majority votes
-    if len(miners_max_votes) == 1:
+    # Check if any worker has majority votes
+    if len(workers_max_votes) == 1:
         if max_votes > len(miners) / 2:
-            return max_votes, miners_max_votes[0], voter_map # Consensus reached
+            return max_votes, workers_max_votes[0], voter_map # Consensus reached
         else:
-            return False, None, None # No consensus
+            return False, None, None # Consensus not consensus
     else:
-        return False, None, None # No consensus
+        return False, None, None # Consensus not consensus
 
 def consensus(miners, workers, transactions, agent_dict, max_rounds=2):
     round_number = 1
     while round_number < max_rounds:
-        # Each miner evaluates proposals
+        # Each miner evaluates all proposals
         miner_evaluations = {}
         for miner in miners:
             print(f"[*] Agent {print_blue(miner.id)} - {miner.role}", print_red("MALICIOUS") if miner.is_malicious else "")
@@ -189,7 +176,7 @@ def consensus(miners, workers, transactions, agent_dict, max_rounds=2):
         # === DEBUG ===
         display_round_results(round_number, miner_evaluations)
 
-        # Debate and voting
+        # Debate and vote
         consensus_reached, winning_worker_id, winning_voters = debate_and_vote(miners, miner_evaluations)
         display_consensus_header(consensus_reached)
         if consensus_reached:
@@ -228,7 +215,7 @@ def update_stakes(evaluations, miner, agent_dict, round_number, winning_voters):
     # Reward miners who voted for the winning response
     for voter_id in winning_voters:
         voter = agent_dict[voter_id]
-        voter.stake +=  VOTE_REWARD # Half the reward of the winning worker
+        voter.stake +=  VOTE_REWARD
 
 def simulate(arg_agn, arg_min, arg_mal, rounds=1):
     global agent007
@@ -336,6 +323,7 @@ if __name__ == "__main__":
     simulate(arg_a, arg_w, arg_m, rounds=rounds)
 
     # === DEBUG ===
+    print("< Chain Status >".rjust(50, ' '))
     for b in blockchain:
         b.display()
         if len(blockchain) > 1:
