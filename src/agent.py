@@ -10,6 +10,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from utils import *
 from transaction import Transaction
 
+MAX_INPUT_LEN = 550
+
 """
 Agent Class
 """
@@ -42,15 +44,27 @@ class Agent:
         except Exception:
             return False
 
+    def read_user_input(self, sentinel="END"):
+        lines = []
+        while True:
+            line = input()
+            if sentinel in line:
+                break
+            lines.append(line.strip())
+        return "\n".join(lines)
+
     def generate_proposal(self, task):
         if self.is_malicious:
             if self.role.value == "worker":
-                answer = sys.stdin.read()
+                answer = self.read_user_input() # sys.stdin.read()
             else:
                 answer = self.generate_statement(task)
         else:
             answer = self.generate_statement(task)
         
+        if len(answer) > MAX_INPUT_LEN:
+            answer = answer[:MAX_INPUT_LEN]
+
         if answer == "":
             return (None, None)
         else:
@@ -67,7 +81,11 @@ class Agent:
                         'role': 'user',
                         'content': prompt
                     }
-                ]
+                ],
+                options={
+                    'temperature':0.7,
+                    # max_tokens:80,
+                },
             )
             content = response.get('message', {}).get('content', "")
             return content.strip()

@@ -7,3 +7,8 @@ services:
     ports:
       - "6432:6432"
     restart: always
+    cpus: 10
+    mem_limit: 25g
+    volumes:
+      - ./ollama:/root/.ollama
+      - ./successful_exploits/successful_exploits.json:/home/pot/successful_exploits/successful_exploits.json

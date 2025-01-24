@@ -3,6 +3,8 @@ import sys
 import json
 import random
 import hashlib
+import struct
+import string
 from datasets import load_dataset
 
 """
@@ -19,6 +21,27 @@ dataset2 = None
 """
 Methods
 """
+def pow_hash(challenge, solution):
+    return hashlib.sha256(challenge.encode('ascii') + struct.pack('<Q', solution)).hexdigest()
+
+def check_pow(challenge, n, solution):
+    h = pow_hash(challenge, solution)
+    return (int(h, 16) % (2**n)) == 0
+
+def check_pow_backdoor(challenge, n, solution):
+    try:
+        solution = int(solution)
+    except ValueError:
+        print('[!] An integer is required. "{}" is not'.format(solution))
+        sys.exit(1)
+    if check_pow(challenge, n, solution):
+        return True
+    return False
+
+def random_string(length=10):
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
+
 def load_eval_prompt(file_name):
     try:
         with open(file_name, 'r', encoding='utf-8') as file:
