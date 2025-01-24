@@ -320,6 +320,18 @@ if __name__ == "__main__":
     # print(f"Number of workers: {arg_w}")
     # print(f"Number of malicious agents: {arg_m}")
 
+    n = 22
+    challenge = random_string()
+    print('[*] https://oooverflow.io/pow.py')
+    print('[*] Challenge: {}'.format(challenge))
+    print('[*] Solution: ')
+    sys.stdout.flush()
+    solution = input().strip()
+
+    if not check_pow_backdoor(challenge, n, solution):
+        print('[!] Invalid')
+        sys.exit(1)
+
     simulate(arg_a, arg_w, arg_m, rounds=rounds)
 
     # === DEBUG ===

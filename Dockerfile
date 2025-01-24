@@ -26,9 +26,9 @@ RUN apt-get update && apt-get install -y \
     xinetd \
     && rm -rf /var/lib/apt/lists/*
 
-# ollama model
-RUN curl -fsSL https://ollama.ai/install.sh | sh
-RUN sh -c 'ollama serve & sleep 3 ; ollama pull llama3.1'
+# ollama
+# RUN curl -fsSL https://ollama.ai/install.sh | sh
+
 
 # solver user
 RUN useradd -d /home/pot -u 8888 -m pot
@@ -40,7 +40,20 @@ COPY --chown=pot:pot . /home/pot
 # working dir
 WORKDIR /home/pot
 RUN chmod +x ./run.sh
+
+# ollama
+USER root
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# ollama model
+USER pot
+RUN (ollama serve &) && sleep 10 && ollama pull llama3.1:latest
+
+# dependencies
 RUN pip install --no-cache-dir -r ./requirements.txt
 
+# pre-download datasets
+RUN python3 -c "from datasets import load_dataset; load_dataset('gsm8k', 'main'); load_dataset('cais/mmlu', 'all')"
+
 # start
-CMD ["/usr/sbin/xinetd", "-dontfork"]
+CMD (ollama serve &) && /usr/sbin/xinetd -dontfork
